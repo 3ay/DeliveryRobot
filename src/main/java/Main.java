@@ -22,9 +22,10 @@ public class Main {
         return count;
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
+        List<Thread> threads = new ArrayList<>();
         for (int i = 0; i < 1000; i++) {
-            new Thread(() -> {
+            Thread thread = new Thread(() -> {
                 int countRepeat = countChar(generateRoute("RLRFR", 100), 'R');
                 synchronized (sizeToFreq) {
                     if (sizeToFreq.containsKey(countRepeat)) {
@@ -32,30 +33,51 @@ public class Main {
                     } else {
                         sizeToFreq.putIfAbsent(countRepeat, 1);
                     }
+                    sizeToFreq.notify();
                 }
-            }).start();
+            });
+            threads.add(thread);
+            thread.start();
         }
-        int maxValue = 0;
-        int maxKey = 0;
-        synchronized (sizeToFreq) {
-            for (Map.Entry<Integer, Integer> entry : sizeToFreq.entrySet()) {
-                int key = entry.getKey();
-                int value = entry.getValue();
+        Thread printThread = new Thread(() -> {
+            while (!Thread.interrupted()) {
+                int maxValue = 0;
+                int maxKey = 0;
+                synchronized (sizeToFreq) {
+                    try {
+                        sizeToFreq.wait();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
 
-                if (value > maxValue) {
-                    maxValue = value;
-                    maxKey = key;
+                    for (Map.Entry<Integer, Integer> entry : sizeToFreq.entrySet()) {
+                        int key = entry.getKey();
+                        int value = entry.getValue();
+
+                        if (value > maxValue) {
+                            maxValue = value;
+                            maxKey = key;
+                        }
+                    }
+                    System.out.println("Самое частое количество повторений " + maxKey + " встретилось " + maxValue + " раз)");
+                    System.out.println("Другие размеры:");
+                    synchronized (sizeToFreq) {
+                        for (Map.Entry<Integer, Integer> entry : sizeToFreq.entrySet()) {
+                            if (entry.getKey() != maxKey) {
+                                System.out.println("- " + entry.getKey() + " (" + entry.getValue() + " раз)");
+                            }
+                        }
+                    }
                 }
+
             }
+        });
+        printThread.start();
+
+        for (Thread thread : threads) {
+            thread.join();
         }
-        System.out.println("Самое частое количество повторений " + maxKey + " встретилось " + maxValue + " раз)");
-        System.out.println("Другие размеры:");
-        synchronized (sizeToFreq) {
-            for (Map.Entry<Integer, Integer> entry : sizeToFreq.entrySet()) {
-                if (entry.getKey() != maxKey) {
-                    System.out.println("- " + entry.getKey() + " (" + entry.getValue() + " раз)");
-                }
-            }
-        }
+
+        printThread.interrupt();
     }
 }
